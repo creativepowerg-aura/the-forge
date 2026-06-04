@@ -144,11 +144,14 @@ const DEFAULT_ORDER = ["mon","tue","wed","thu","fri","sat","sun"];
 const WEEK_DAYS = ["MON","TUE","WED","THU","FRI","SAT","SUN"];
 
 function isFirstTimeUser() {
-  return !localStorage.getItem("forge:onboarded");
+  if (!activeProfileId) return true;
+  return !localStorage.getItem(pKey("onboarded"));
 }
 
 function completeOnboarding() {
-  localStorage.setItem("forge:onboarded", "true");
+  if (activeProfileId) {
+    localStorage.setItem(pKey("onboarded"), "true");
+  }
 }
 let timerInterval = null;
 let timerStart = null;
@@ -193,14 +196,14 @@ let ORDER = [...DEFAULT_ORDER];
 let draftOrder = [];
 let draftDayMuscles = {};
 try {
-  let savedOrd = localStorage.getItem("forge:schedule");
+  let savedOrd = localStorage.getItem(pKey("schedule"));
   if(savedOrd) ORDER = JSON.parse(savedOrd);
 } catch(e) {}
 
 /* storage */
 function loadDay(key) {
   try {
-    const raw = localStorage.getItem("forge:day:" + key);
+    const raw = localStorage.getItem(pKey("day:" + key));
     return raw ? JSON.parse(raw) : {};
   } catch (e) {
     return {};
@@ -209,12 +212,75 @@ function loadDay(key) {
 
 function saveDay(key, data) {
   try {
-    localStorage.setItem("forge:day:" + key, JSON.stringify(data));
+    localStorage.setItem(pKey("day:" + key), JSON.stringify(data));
   } catch (e) {}
 }
 
 let current = ORDER[(new Date().getDay()+6)%7];
 let state = {};
+
+// ── PROFILE SYSTEM ────────────────────────────────────────
+let activeProfileId = null;
+
+function getProfileList() {
+  try {
+    const raw = localStorage.getItem("forge:profiles");
+    return raw ? JSON.parse(raw) : [];
+  } catch(e) { return []; }
+}
+
+function saveProfileList(list) {
+  try { localStorage.setItem("forge:profiles", JSON.stringify(list)); } catch(e) {}
+}
+
+function getActiveProfileId() {
+  return localStorage.getItem("forge:activeProfile") || null;
+}
+
+function setActiveProfileId(id) {
+  activeProfileId = id;
+  localStorage.setItem("forge:activeProfile", id);
+}
+
+function getProfile(id) {
+  try {
+    const raw = localStorage.getItem(`forge:profile:${id}`);
+    return raw ? JSON.parse(raw) : null;
+  } catch(e) { return null; }
+}
+
+function saveProfile(profile) {
+  try { localStorage.setItem(`forge:profile:${profile.id}`, JSON.stringify(profile)); } catch(e) {}
+}
+
+function createProfile(name, color) {
+  const id = "p" + Date.now();
+  const profile = { id, name, color, created: new Date().toISOString() };
+  saveProfile(profile);
+  const list = getProfileList();
+  list.push(id);
+  saveProfileList(list);
+  return profile;
+}
+
+function deleteProfile(id) {
+  // Remove all profile-scoped keys
+  const keysToRemove = [];
+  for (let i = 0; i < localStorage.length; i++) {
+    const key = localStorage.key(i);
+    if (key && key.startsWith(`forge:${id}:`)) keysToRemove.push(key);
+  }
+  keysToRemove.forEach(k => localStorage.removeItem(k));
+  localStorage.removeItem(`forge:profile:${id}`);
+  const list = getProfileList().filter(p => p !== id);
+  saveProfileList(list);
+}
+
+function pKey(key) {
+  // Namespace a key under the active profile
+  return `forge:${activeProfileId}:${key}`;
+}
+
 
 function renderNav(){
   const currentPlan = buildPlan();
@@ -556,11 +622,11 @@ let gearState = {};
 function initGear() {
   GEAR_CATALOG.forEach(g => gearState[g.id] = g.def);
   try {
-    const saved = localStorage.getItem("forge:gear");
+    const saved = localStorage.getItem(pKey("gear"));
     if(saved) gearState = Object.assign(gearState, JSON.parse(saved));
   } catch(e) {}
   try {
-    const savedMuscles = localStorage.getItem("forge:daymuscles");
+    const savedMuscles = localStorage.getItem(pKey("daymuscles"));
     if (savedMuscles) dayMuscles = JSON.parse(savedMuscles);
   } catch(e) {}
 }
@@ -750,7 +816,7 @@ function buildPlan() {
 }
 
 function renderGear() {
-  try { const s = localStorage.getItem("forge:gear"); if(s) gearState = Object.assign(gearState, JSON.parse(s)); } catch(e) {}
+  try { const s = localStorage.getItem(pKey("gear")); if(s) gearState = Object.assign(gearState, JSON.parse(s)); } catch(e) {}
   const c = document.getElementById("gearListContainer");
   if(!c) return;
   
@@ -763,7 +829,7 @@ function renderGear() {
   c.querySelectorAll('.gear-item').forEach(el => {
     el.onclick = () => {
       gearState[el.dataset.id] = !gearState[el.dataset.id];
-      localStorage.setItem("forge:gear", JSON.stringify(gearState));
+      localStorage.setItem(pKey("gear"), JSON.stringify(gearState));
       renderGear();
       renderDay(); // Will re-render plan based on gear later
     };
@@ -797,13 +863,13 @@ function updateGearFooter(plan) {
 let sessionLength = 45;
 const sessionSelect = document.getElementById("sessionLength");
 if(sessionSelect) {
-  const savedLen = localStorage.getItem("forge:sessionLen");
+  const savedLen = localStorage.getItem(pKey("sessionLen"));
   if(savedLen) sessionSelect.value = savedLen;
   sessionLength = parseInt(sessionSelect.value, 10);
   
   sessionSelect.addEventListener("change", (e) => {
     sessionLength = parseInt(e.target.value, 10);
-    localStorage.setItem("forge:sessionLen", sessionLength);
+    localStorage.setItem(pKey("sessionLen"), sessionLength);
     renderDay();
   });
 }
@@ -1062,8 +1128,8 @@ if(ssave) {
   ssave.onclick = () => {
     ORDER = [...draftOrder];
     dayMuscles = JSON.parse(JSON.stringify(draftDayMuscles));
-    localStorage.setItem("forge:schedule", JSON.stringify(ORDER));
-    localStorage.setItem("forge:daymuscles", JSON.stringify(dayMuscles));
+    localStorage.setItem(pKey("schedule"), JSON.stringify(ORDER));
+    localStorage.setItem(pKey("daymuscles"), JSON.stringify(dayMuscles));
     renderNav();
     selectDay(current);
     document.getElementById("scheduleModal").classList.remove("open");
@@ -1073,12 +1139,167 @@ if(ssave) {
 // Rest timer interactions
 
 
-initGear();
-if (isFirstTimeUser()) {
-  renderOnboarding();
-} else {
-  renderNav();
-  selectDay(current);
+function initApp() {
+  // Check for existing profiles
+  const profiles = getProfileList();
+  const savedActive = getActiveProfileId();
+
+  if (profiles.length === 0) {
+    // Brand new install — create default profile and go to onboarding
+    renderProfileSetup();
+    return;
+  } else if (savedActive && profiles.includes(savedActive)) {
+    // Returning user with a valid active profile
+    activeProfileId = savedActive;
+    initGear();
+    if (isFirstTimeUser()) {
+      renderOnboarding();
+    } else {
+      renderNav();
+      selectDay(current);
+    }
+  } else {
+    // Has profiles but no active one — show profile selector
+    activeProfileId = profiles[0];
+    setActiveProfileId(profiles[0]);
+    initGear();
+    renderNav();
+    selectDay(current);
+  }
+  if (typeof initRestTimer === 'function') initRestTimer();
+  renderProfileAvatar();
+}
+
+initApp();
+
+function renderProfileAvatar() {
+  const profile = getProfile(activeProfileId);
+  if (!profile) return;
+
+  const existing = document.getElementById("profileAvatar");
+  if (existing) existing.remove();
+
+  const btn = document.createElement("button");
+  btn.id = "profileAvatar";
+  btn.className = "profile-avatar";
+  btn.style.background = profile.color;
+  btn.textContent = profile.name.charAt(0).toUpperCase();
+  btn.onclick = () => renderProfileSheet();
+
+  const header = document.querySelector("header .brand");
+  if (header) header.parentNode.insertBefore(btn, header.nextSibling);
+}
+
+function renderProfileSheet() {
+  const existing = document.getElementById("profileSheet");
+  if (existing) existing.remove();
+
+  const profiles = getProfileList();
+  const sheet = document.createElement("div");
+  sheet.id = "profileSheet";
+  sheet.className = "profile-sheet-overlay";
+
+  const profileRows = profiles.map(id => {
+    const p = getProfile(id);
+    if (!p) return "";
+    const isActive = id === activeProfileId;
+    return `<div class="profile-row ${isActive ? 'active' : ''}" data-id="${id}">
+      <div class="profile-row-avatar" style="background:${p.color}">${p.name.charAt(0).toUpperCase()}</div>
+      <div class="profile-row-info">
+        <div class="profile-row-name">${p.name}</div>
+        ${isActive ? '<div class="profile-row-active">ACTIVE</div>' : ''}
+      </div>
+      ${!isActive ? `<button class="profile-row-delete" data-id="${id}">✕</button>` : ''}
+    </div>`;
+  }).join("");
+
+  const profileCount = profiles.length;
+  const atLimit = profileCount >= 2;
+
+  const addSection = atLimit ? `
+    <div class="profile-limit-card">
+      <div class="profile-limit-icon">👫</div>
+      <div class="profile-limit-title">BUILT FOR TWO</div>
+      <div class="profile-limit-text">The Forge is designed for you and a partner — one subscription, two profiles, full independence. Multi-profile support coming in a future update.</div>
+    </div>` : `
+    <div class="profile-add-wrap">
+      <input id="newProfileName" class="profile-name-input" placeholder="Partner's name..." maxlength="20">
+      <div class="profile-colors">
+        ${["#00d4ff","#00dc82","#ff5b1e","#ffa12e","#a855f7","#ec4899","#f43f5e","#6366f1"].map(c =>
+          `<div class="color-dot" data-color="${c}" style="background:${c}"></div>`
+        ).join("")}
+      </div>
+      <button class="profile-add-btn" id="addProfileBtn">+ ADD PARTNER PROFILE</button>
+    </div>`;
+
+  sheet.innerHTML = `
+    <div class="profile-sheet">
+      <div class="grab"></div>
+      <div class="profile-sheet-title">PROFILES</div>
+      <div class="profile-list">${profileRows}</div>
+      ${addSection}
+      <button class="closeb" id="closeProfileSheet">DONE</button>
+    </div>`;
+
+  document.body.appendChild(sheet);
+
+  // Switch profile
+  sheet.querySelectorAll(".profile-row").forEach(row => {
+    row.onclick = (e) => {
+      if (e.target.classList.contains("profile-row-delete")) return;
+      const id = row.dataset.id;
+      if (id === activeProfileId) return;
+      setActiveProfileId(id);
+      activeProfileId = id;
+      initGear();
+      renderNav();
+      selectDay(current);
+      renderProfileAvatar();
+      sheet.remove();
+    };
+  });
+
+  // Delete profile
+  sheet.querySelectorAll(".profile-row-delete").forEach(btn => {
+    btn.onclick = (e) => {
+      e.stopPropagation();
+      const id = btn.dataset.id;
+      const p = getProfile(id);
+      if (confirm(`Delete profile "${p?.name}"? All data will be lost.`)) {
+        deleteProfile(id);
+        renderProfileSheet();
+      }
+    };
+  });
+
+  // Color selection
+  let selectedColor = "#00d4ff";
+  sheet.querySelectorAll(".color-dot").forEach(dot => {
+    dot.onclick = () => {
+      sheet.querySelectorAll(".color-dot").forEach(d => d.classList.remove("selected"));
+      dot.classList.add("selected");
+      selectedColor = dot.dataset.color;
+    };
+  });
+  sheet.querySelector(".color-dot").classList.add("selected");
+
+  // Add profile
+  const addBtn = document.getElementById("addProfileBtn");
+  if (addBtn) addBtn.onclick = () => {
+    const name = document.getElementById("newProfileName").value.trim();
+    if (!name) return;
+    const profile = createProfile(name, selectedColor);
+    setActiveProfileId(profile.id);
+    activeProfileId = profile.id;
+    initGear();
+    sheet.remove();
+    renderOnboarding();
+    renderProfileAvatar();
+  };
+
+  // Close
+  document.getElementById("closeProfileSheet").onclick = () => sheet.remove();
+  sheet.onclick = (e) => { if (e.target.id === "profileSheet") sheet.remove(); };
 }
 
 document.getElementById("cancelScheduleBtn").onclick = () => {
@@ -1105,7 +1326,7 @@ function toggleWarmup(id) {
 }
 
 function getLogKey(dateStr, dayKey) {
-  return `forge:log:${dateStr}-${dayKey}`;
+  return pKey(`log:${dateStr}-${dayKey}`);
 }
 
 function getTodayString() {
@@ -1118,13 +1339,13 @@ function getTodayString() {
 
 function loadLogIndex() {
   try {
-    const raw = localStorage.getItem("forge:log:index");
+    const raw = localStorage.getItem(pKey("log:index"));
     return raw ? JSON.parse(raw) : [];
   } catch(e) { return []; }
 }
 
 function saveLogIndex(index) {
-  try { localStorage.setItem("forge:log:index", JSON.stringify(index)); } catch(e) {}
+  try { localStorage.setItem(pKey("log:index"), JSON.stringify(index)); } catch(e) {}
 }
 
 function saveSession(dayKey, pct) {
@@ -1136,7 +1357,7 @@ function saveSession(dayKey, pct) {
     const s = state[e.id] || {};
     const done = Math.min(s.done || 0, e.sets);
     const weight = parseFloat(s.weight) || 0;
-    const prKey = `forge:prs`;
+    const prKey = pKey("prs");
     let isPR = false;
     try {
       const prs = JSON.parse(localStorage.getItem(prKey) || "{}");
@@ -1237,7 +1458,7 @@ function renderFinishBtn(pct) {
 
 function getDayStatus(dayKey) {
   const today = getTodayString();
-  const key = `forge:log:${today}-${dayKey}`;
+  const key = pKey(`log:${today}-${dayKey}`);
   try {
     const raw = localStorage.getItem(key);
     if (!raw) return "untouched";
@@ -1291,7 +1512,7 @@ function getWeekSummary() {
     for (let i = 0; i < 30; i++) {
       const dateStr = checkDate.toISOString().split("T")[0];
       const hasSession = index.some(id => {
-        const key = `forge:log:${id}`;
+        const key = pKey(`log:${id}`);
         try {
           const raw = localStorage.getItem(key);
           if (!raw) return false;
@@ -1402,7 +1623,7 @@ document.getElementById("thisWeekBtn").onclick = () => {
 
 function loadPRs() {
   try {
-    const raw = localStorage.getItem("forge:prs");
+    const raw = localStorage.getItem(pKey("prs"));
     return raw ? JSON.parse(raw) : {};
   } catch(e) { return {}; }
 }
@@ -1412,7 +1633,7 @@ function getExerciseHistory(exerciseId) {
     const index = loadLogIndex();
     const history = [];
     index.forEach(id => {
-      const raw = localStorage.getItem(`forge:log:${id}`);
+      const raw = localStorage.getItem(pKey(`log:${id}`));
       if (!raw) return;
       const session = JSON.parse(raw);
       const ex = session.exercises?.find(e => e.id === exerciseId);
@@ -1458,7 +1679,7 @@ function renderHistory() {
   const weeks = {};
   index.forEach(id => {
     try {
-      const raw = localStorage.getItem(`forge:log:${id}`);
+      const raw = localStorage.getItem(pKey(`log:${id}`));
       if (!raw) return;
       const session = JSON.parse(raw);
       const date = new Date(session.date);
@@ -1626,6 +1847,65 @@ function hideRestTimer() {
   restTotal = 0;
 }
 
+
+function renderProfileSetup() {
+  const overlay = document.getElementById("onboardOverlay");
+  const content = document.getElementById("onboardContent");
+  if (!overlay || !content) return;
+
+  document.getElementById("appShell").style.display = "none";
+  overlay.classList.remove("hidden");
+
+  const colors = ["#00d4ff","#00dc82","#ff5b1e","#ffa12e","#a855f7","#ec4899","#f43f5e","#6366f1"];
+  let selectedColor = "#00d4ff";
+
+  content.innerHTML = `
+    <div class="onboard-screen">
+      <div class="onboard-hero">
+        <div class="onboard-logo-mark">
+          <svg viewBox="0 0 24 24" fill="none" stroke="#00d4ff" stroke-width="2.1" stroke-linecap="round">
+            <path d="M4 9v6M20 9v6M7 7v10M17 7v10M7 12h10"/>
+          </svg>
+        </div>
+        <h1 class="onboard-hero-title">THE<br>FORGE</h1>
+        <p class="onboard-hero-tag">HOME BUILT · NO EXCUSES</p>
+      </div>
+      <div class="profile-setup-card">
+        <div class="profile-setup-label">WHAT'S YOUR NAME?</div>
+        <input id="setupName" class="profile-name-input" placeholder="Enter your name..." maxlength="20" autofocus>
+        <div class="profile-setup-label" style="margin-top:16px">PICK YOUR COLOR</div>
+        <div class="profile-colors">
+          ${colors.map((c,i) => `<div class="color-dot ${i===0?'selected':''}" data-color="${c}" style="background:${c}"></div>`).join("")}
+        </div>
+      </div>
+      <button class="onboard-cta" id="setupContinue">CONTINUE →</button>
+    </div>`;
+
+  content.querySelectorAll(".color-dot").forEach(dot => {
+    dot.onclick = () => {
+      content.querySelectorAll(".color-dot").forEach(d => d.classList.remove("selected"));
+      dot.classList.add("selected");
+      selectedColor = dot.dataset.color;
+    };
+  });
+
+  document.getElementById("setupContinue").onclick = () => {
+    const name = document.getElementById("setupName").value.trim();
+    if (!name) {
+      document.getElementById("setupName").style.borderColor = "#f43f5e";
+      return;
+    }
+    const profile = createProfile(name, selectedColor);
+    setActiveProfileId(profile.id);
+    activeProfileId = profile.id;
+    initGear();
+    overlay.classList.add("hidden");
+    document.getElementById("appShell").style.display = "";
+    renderOnboarding();
+    renderProfileAvatar();
+  };
+}
+
 function renderOnboarding() {
   const overlay = document.getElementById("onboardOverlay");
   const content = document.getElementById("onboardContent");
@@ -1711,7 +1991,7 @@ function renderOnboarding() {
       });
 
       document.getElementById("onboardCta2").onclick = () => {
-        try { localStorage.setItem("forge:gear", JSON.stringify(gearState)); } catch(e) {}
+        try { localStorage.setItem(pKey("gear"), JSON.stringify(gearState)); } catch(e) {}
         goToStep(3);
       };
 
@@ -1786,7 +2066,7 @@ function renderOnboarding() {
       }, { once: true });
 
       document.getElementById("onboardCta3").onclick = () => {
-        try { localStorage.setItem("forge:daymuscles", JSON.stringify(dayMuscles)); } catch(e) {}
+        try { localStorage.setItem(pKey("daymuscles"), JSON.stringify(dayMuscles)); } catch(e) {}
         completeOnboarding();
         overlay.classList.add("hidden");
         document.getElementById("appShell").style.display = "";
