@@ -1,0 +1,5 @@
+<body>
+<div id="onboardOverlay" class="onboard-overlay hidden">
+  <div id="onboardContent" class="onboard-content"></div>
+</div>
+<div id="appShell">

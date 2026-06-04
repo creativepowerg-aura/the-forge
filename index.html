@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <!-- THE FORGE — home workout app v2 (Optimized) -->
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>The Forge</title>
+  
+  <!-- Fonts: Inter for readability, Outfit for high-tech headers, JetBrains Mono for data/code blocks -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Outfit:wght@700;800;900&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
+  
+  <!-- Stylesheet -->
+  <link rel="stylesheet" href="style.css">
+  <link rel="manifest" href="manifest.json">
+  <meta name="theme-color" content="#0c0c0e">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="The Forge">
+  <link rel="apple-touch-icon" href="icon-192.png">
+</head>
+<body>
+<div id="onboardOverlay" class="onboard-overlay hidden">
+  <div id="onboardContent" class="onboard-content"></div>
+</div>
+<div id="appShell">
+
+  <div class="wrap">
+    <header>
+      <div class="brand">
+        <div class="mark">
+          <svg viewBox="0 0 24 24" fill="none" stroke="var(--ember)" stroke-width="2.1" stroke-linecap="round">
+            <path d="M4 9v6M20 9v6M7 7v10M17 7v10M7 12h10"/>
+          </svg>
+        </div>
+        <div>
+          <h1>THE FORGE</h1>
+          <div class="tag">HOME BUILT · NO EXCUSES</div>
+        </div>
+      </div>
+      <button class="gearbtn" id="gearToggle">GEAR</button>
+    </header>
+    
+    <div class="gear" id="gearPanel">
+      <div class="gear-inner">
+        <div class="gear-header">
+          <h3>YOUR ARSENAL</h3>
+          <div class="session-selector">
+            <label for="sessionLength">SESSION</label>
+            <select id="sessionLength">
+              <option value="30">Express (30m)</option>
+              <option value="45" selected>Standard (45m)</option>
+              <option value="60">Full (60m+)</option>
+            </select>
+          </div>
+        </div>
+        
+        <div id="gearListContainer">
+          <!-- Dynamically populated by app.js -->
+        </div>
+        
+        <div class="gear-footer" id="gearFooterCount">Loading...</div>
+        <button id="saveGearBtn">SAVE & CLOSE</button>
+      </div>
+    </div>
+    <div class="nav-wrapper">
+      <div class="nav-header">
+        <button id="thisWeekBtn" class="thisweek-btn">THIS WEEK</button>
+        <button class="sched-btn" id="scheduleToggle">
+          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 20h9M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg> EDIT SCHEDULE
+        </button>
+      </div>
+      <div class="nav" id="nav"></div>
+    </div>
+    <div id="day"></div>
+    
+    <div class="footnote">
+      Tap any exercise to see the full form breakdown. <span class="principles" id="openPrinciples">How to actually grow →</span>
+      <button class="reset" id="resetDay">reset this day's progress</button>
+    </div>
+  </div>
+  <!-- schedule sheet -->
+  <div class="modal" id="scheduleModal">
+    <div class="sheet" id="scheduleSheet">
+      <div class="grab"></div>
+      <div class="fhead">
+        <h2>YOUR WEEK</h2>
+        <button class="sched-reset" id="scheduleReset">RESET DEFAULT</button>
+      </div>
+      <div id="scheduleWarning" class="sched-warning" style="display:none;"></div>
+      <div class="sched-list" id="scheduleList"></div>
+      <div id="trainerTip" class="trainer-tip tip-info">
+        <span class="tip-icon">💡</span>
+        <span class="tip-text">Classic pairing: CHEST + TRICEPS, BACK + BICEPS, then LEGS and SHOULDERS solo. That covers every muscle group efficiently across the week.</span>
+      </div>
+      <button class="closeb" id="saveSchedule">SAVE SCHEDULE</button>
+      <button id="cancelScheduleBtn">CANCEL</button>
+    </div>
+  </div>
+
+  <!-- form sheet -->
+  <div class="modal" id="formModal">
+    <div class="sheet" id="formSheet"></div>
+  </div>
+
+  <!-- principles sheet -->
+  <div class="modal" id="modal">
+    <div class="sheet">
+      <div class="grab"></div>
+      <h3>THE 4 RULES OF GROWTH</h3>
+      <div class="prow">
+        <span class="pn">1</span>
+        <div>
+          <p>Add a little every week</p>
+          <p>Beat last week — one more rep, or +5 lb once you hit the top of the rep range cleanly. Log your weights so you know.</p>
+        </div>
+      </div>
+      <div class="prow">
+        <span class="pn">2</span>
+        <div>
+          <p>Train near failure</p>
+          <p>The last 1–2 reps of each set should be genuinely hard. If you could've done 5 more, go heavier.</p>
+        </div>
+      </div>
+      <div class="prow">
+        <span class="pn">3</span>
+        <div>
+          <p>Control the negative</p>
+          <p>Lower the weight slowly (2–3 sec). The lowering phase builds as much muscle as the lift.</p>
+        </div>
+      </div>
+      <div class="prow">
+        <span class="pn">4</span>
+        <div>
+          <p>Eat & sleep to build</p>
+          <p>Slight calorie surplus, ~0.7–1g protein per lb of bodyweight, 7–9 hrs sleep. Muscle is built in recovery.</p>
+        </div>
+      </div>
+      <button class="closeb" id="closeModal">GOT IT</button>
+    </div>
+  </div>
+
+  <!-- Scripts -->
+  <script src="exercise-library.js"></script>
+  <script src="exercise-updates.js"></script>
+  <script src="bodyweight-fallback.js"></script>
+  <script src="muscle-diagram.js"></script>
+  <script src="app.js"></script>
+
+<div id="restToast" class="rest-toast">
+  <div class="rest-toast-left">
+    <svg class="rest-toast-ring" viewBox="0 0 36 36">
+      <circle cx="18" cy="18" r="14" fill="none" stroke="rgba(255,255,255,.1)" stroke-width="3"/>
+      <circle id="restRing" cx="18" cy="18" r="14" fill="none" stroke="#00d4ff" stroke-width="3"
+        stroke-linecap="round" stroke-dasharray="88" stroke-dashoffset="0"
+        style="transform:rotate(-90deg); transform-origin:center; transition: stroke-dashoffset .9s linear, stroke .3s;"/>
+    </svg>
+    <div class="rest-toast-time">
+      <div id="restCountdown" class="rest-toast-countdown">—</div>
+      <div id="restLabel" class="rest-toast-label">REST</div>
+    </div>
+  </div>
+  <button class="rest-toast-skip" id="restSkip">SKIP</button>
+</div>
+</div>
+<script>
+  if ("serviceWorker" in navigator) {
+    window.addEventListener("load", () => {
+      navigator.serviceWorker.register("./sw.js")
+        .then(reg => console.log("Service worker registered:", reg.scope))
+        .catch(err => console.log("Service worker failed:", err));
+    });
+  }
+</script>
+</body>
+\n
+</html>

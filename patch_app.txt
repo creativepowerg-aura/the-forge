@@ -1,0 +1,173 @@
+function renderOnboarding() {
+  const overlay = document.getElementById("onboardOverlay");
+  const content = document.getElementById("onboardContent");
+  if (!overlay || !content) return;
+
+  // Hide main app
+  document.getElementById("appShell").style.display = "none";
+  overlay.classList.remove("hidden");
+
+  let step = 1;
+
+  function goToStep(n) {
+    content.style.opacity = "0";
+    content.style.transform = "translateY(16px)";
+    setTimeout(() => {
+      step = n;
+      renderStep();
+      content.style.opacity = "1";
+      content.style.transform = "translateY(0)";
+    }, 200);
+  }
+
+  function stepDots(current) {
+    return `<div class="onboard-dots">
+      ${[1,2,3].map(i => `<div class="onboard-dot ${i === current ? 'active' : i < current ? 'done' : ''}"></div>`).join("")}
+    </div>`;
+  }
+
+  function renderStep() {
+    if (step === 1) {
+      content.innerHTML = `
+        <div class="onboard-screen">
+          <div class="onboard-glow"></div>
+          <div class="onboard-hero">
+            <div class="onboard-logo-mark">
+              <svg viewBox="0 0 24 24" fill="none" stroke="#00d4ff" stroke-width="2.1" stroke-linecap="round">
+                <path d="M4 9v6M20 9v6M7 7v10M17 7v10M7 12h10"/>
+              </svg>
+            </div>
+            <h1 class="onboard-hero-title">THE<br>FORGE</h1>
+            <p class="onboard-hero-tag">HOME BUILT · NO EXCUSES</p>
+          </div>
+          <div class="onboard-features-list">
+            <div class="onboard-feat"><div class="onboard-feat-icon" style="background:rgba(0,212,255,.12);color:#00d4ff">⚡</div><div><div class="onboard-feat-title">Dynamic workouts</div><div class="onboard-feat-desc">Built around your gear, updated instantly when you add equipment</div></div></div>
+            <div class="onboard-feat"><div class="onboard-feat-icon" style="background:rgba(0,220,130,.1);color:#00dc82">📋</div><div><div class="onboard-feat-title">Full form coaching</div><div class="onboard-feat-desc">Step-by-step cues, breathing, and modifiers for every exercise</div></div></div>
+            <div class="onboard-feat"><div class="onboard-feat-icon" style="background:rgba(255,161,46,.1);color:#ffa12e">🏆</div><div><div class="onboard-feat-title">Progress tracking</div><div class="onboard-feat-desc">PRs, history, weekly dashboard and session logs</div></div></div>
+            <div class="onboard-feat"><div class="onboard-feat-icon" style="background:rgba(255,91,30,.1);color:#ff5b1e">🗓️</div><div><div class="onboard-feat-title">Your schedule</div><div class="onboard-feat-desc">Pick your muscles, pair your days, build your perfect split</div></div></div>
+          </div>
+          <button class="onboard-cta" id="onboardCta1">GET STARTED →</button>
+          ${stepDots(1)}
+        </div>`;
+      document.getElementById("onboardCta1").onclick = () => goToStep(2);
+
+    } else if (step === 2) {
+      const gearHTML = GEAR_CATALOG.map(g => `
+        <div class="onboard-gear-row ${gearState[g.id] ? 'selected' : ''}" data-id="${g.id}">
+          <div class="onboard-gear-row-icon">${g.icon}</div>
+          <div class="onboard-gear-row-info">
+            <div class="onboard-gear-row-name">${g.name}</div>
+            <div class="onboard-gear-row-desc">${g.desc}</div>
+          </div>
+          <div class="onboard-gear-row-check">${gearState[g.id] ? '✓' : ''}</div>
+        </div>`).join("");
+
+      content.innerHTML = `
+        <div class="onboard-screen">
+          <div class="onboard-screen-header">
+            ${stepDots(2)}
+            <h2 class="onboard-screen-title">What's in your home gym?</h2>
+            <p class="onboard-screen-sub">Select everything you have access to. Your workouts will be built around this — you can update it anytime.</p>
+          </div>
+          <div class="onboard-gear-scroll">${gearHTML}</div>
+          <button class="onboard-cta" id="onboardCta2">NEXT →</button>
+        </div>`;
+
+      content.querySelectorAll(".onboard-gear-row").forEach(row => {
+        row.onclick = () => {
+          const id = row.dataset.id;
+          gearState[id] = !gearState[id];
+          row.classList.toggle("selected", gearState[id]);
+          row.querySelector(".onboard-gear-row-check").textContent = gearState[id] ? "✓" : "";
+        };
+      });
+
+      document.getElementById("onboardCta2").onclick = () => {
+        try { localStorage.setItem("forge:gear", JSON.stringify(gearState)); } catch(e) {}
+        goToStep(3);
+      };
+
+    } else if (step === 3) {
+      const scheduleHTML = ORDER.slice(0,6).map((k, idx) => {
+        const dayLabel = ["MON","TUE","WED","THU","FRI","SAT"][idx];
+        const selected = dayMuscles[k] || [];
+        return `
+          <div class="onboard-sched-row">
+            <div class="onboard-sched-day">${dayLabel}</div>
+            <div class="onboard-sched-muscles">
+              ${selected.map(m => `<span class="onboard-muscle-tag">${m.toUpperCase()}</span>`).join("")}
+              ${selected.length === 0 ? `<span class="onboard-muscle-empty">tap ▼</span>` : ""}
+            </div>
+            <div class="onboard-sched-dropdown-wrap">
+              <button class="onboard-sched-btn" data-day="${k}">▼</button>
+              <div class="onboard-sched-dropdown hidden" data-day="${k}">
+                ${MUSCLES.filter(m => m.id !== "rest").map(m => `
+                  <div class="onboard-muscle-opt ${selected.includes(m.id) ? 'checked' : ''}"
+                    data-day="${k}" data-muscle="${m.id}">
+                    ${selected.includes(m.id) ? "✓" : "+"} ${m.label}
+                  </div>`).join("")}
+              </div>
+            </div>
+          </div>`;
+      }).join("");
+
+      content.innerHTML = `
+        <div class="onboard-screen">
+          <div class="onboard-screen-header">
+            ${stepDots(3)}
+            <h2 class="onboard-screen-title">Build your weekly split</h2>
+            <p class="onboard-screen-sub">Choose which muscles to train each day. Max 2 per day. Classic pairing: Chest+Tri, Back+Bi, Legs, Shoulders.</p>
+          </div>
+          <div class="onboard-sched-list">${scheduleHTML}</div>
+          <button class="onboard-cta" id="onboardCta3">START TRAINING →</button>
+        </div>`;
+
+      content.querySelectorAll(".onboard-sched-btn").forEach(btn => {
+        btn.onclick = (e) => {
+          e.stopPropagation();
+          content.querySelectorAll(".onboard-sched-dropdown").forEach(d => {
+            if (d.dataset.day !== btn.dataset.day) d.classList.add("hidden");
+          });
+          content.querySelector(`.onboard-sched-dropdown[data-day="${btn.dataset.day}"]`).classList.toggle("hidden");
+        };
+      });
+
+      content.querySelectorAll(".onboard-muscle-opt").forEach(opt => {
+        opt.onclick = (e) => {
+          e.stopPropagation();
+          const day = opt.dataset.day;
+          const muscle = opt.dataset.muscle;
+          const cur = dayMuscles[day] || [];
+          if (cur.includes(muscle)) {
+            dayMuscles[day] = cur.filter(m => m !== muscle);
+          } else {
+            if (muscle === "mobility") {
+              dayMuscles[day] = [muscle];
+            } else {
+              const filtered = cur.filter(m => m !== "rest" && m !== "mobility");
+              if (filtered.length >= 2) return;
+              dayMuscles[day] = [...filtered, muscle];
+            }
+          }
+          renderStep();
+        };
+      });
+
+      document.addEventListener("click", () => {
+        content.querySelectorAll(".onboard-sched-dropdown").forEach(d => d.classList.add("hidden"));
+      }, { once: true });
+
+      document.getElementById("onboardCta3").onclick = () => {
+        try { localStorage.setItem("forge:daymuscles", JSON.stringify(dayMuscles)); } catch(e) {}
+        completeOnboarding();
+        overlay.classList.add("hidden");
+        document.getElementById("appShell").style.display = "";
+        renderNav();
+        selectDay(current);
+      };
+    }
+  }
+
+  content.style.transition = "opacity .2s ease, transform .2s ease";
+  renderStep();
+}
