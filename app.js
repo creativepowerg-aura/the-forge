@@ -875,6 +875,16 @@ if(sessionSelect) {
 }
 
 // --- Schedule Editor Logic ---
+
+// Muscles that are always selected as an inseparable pair.
+// Selecting either member auto-selects its partner; deselecting either removes both.
+const PAIRED_MUSCLES = {
+  chest: "triceps",
+  triceps: "chest",
+  back: "biceps",
+  biceps: "back",
+};
+
 const MUSCLES = [
   { id:"chest",     label:"CHEST",     planKey:"mon" },
   { id:"triceps",   label:"TRICEPS",   planKey:"mon" },
@@ -916,102 +926,134 @@ function renderSchedule() {
   if (!list) return;
   list.innerHTML = "";
 
+  // Sunday is always the last slot and is hard-locked to REST.
+  // Enforce this before rendering so drag-and-drop can never override it.
+  const SUNDAY_KEY = "sun";
+  draftDayMuscles[SUNDAY_KEY] = ["rest"];
+  // Ensure sun is always in position 6 regardless of drag history
+  if (draftOrder[6] !== SUNDAY_KEY) {
+    const sunIdx = draftOrder.indexOf(SUNDAY_KEY);
+    if (sunIdx !== -1) {
+      draftOrder.splice(sunIdx, 1);
+      draftOrder[6] = SUNDAY_KEY;
+    }
+  }
+
+  // Close-dropdown handler — use a single named function so we can remove+re-add cleanly
+  if (renderSchedule._closeDropdowns) {
+    document.removeEventListener("click", renderSchedule._closeDropdowns);
+  }
+  renderSchedule._closeDropdowns = () => {
+    document.querySelectorAll(".sd-muscle-dropdown").forEach(d => d.classList.add("hidden"));
+  };
+  document.addEventListener("click", renderSchedule._closeDropdowns);
+
   // Work from draftDayMuscles during editing
   WEEK_DAYS.forEach((dayLabel, idx) => {
     const k = draftOrder[idx];
-    const selected = draftDayMuscles[k] || [];
+    const isSunday = k === SUNDAY_KEY;
+    const selected = isSunday ? ["rest"] : (draftDayMuscles[k] || []);
 
     const el = document.createElement("div");
-    el.className = "sched-day";
+    el.className = "sched-day" + (isSunday ? " locked" : "");
     el.dataset.key = k;
 
     const selectedHTML = selected.length
-      ? selected.map(id => `<span class="muscle-tag">${id.toUpperCase()}</span>`).join("")
+      ? selected.map(id => `<span class="muscle-tag${id === "rest" ? " rest-tag" : ""}">${id.toUpperCase()}</span>`).join("")
       : `<span class="muscle-tag empty">SELECT</span>`;
 
     el.innerHTML = `
       <div class="sd-left">
-        <div class="sd-handle">☰</div>
+        ${isSunday
+          ? `<div class="sd-lock">🔒</div>`
+          : `<div class="sd-handle">☰</div>`}
         <div class="sd-name">${dayLabel}</div>
       </div>
       <div class="sd-right">
         <div class="sd-selected" data-key="${k}">${selectedHTML}</div>
+        ${!isSunday ? `
         <div class="sd-dropdown-wrap" data-key="${k}">
           <button class="sd-open-btn" data-key="${k}">▼</button>
           <div class="sd-muscle-dropdown hidden" data-key="${k}">
-            ${MUSCLES.map(m => {
+            ${MUSCLES.filter(m => m.id !== "rest").map(m => {
               const isChecked = selected.includes(m.id);
-              const isDisabled = !isChecked && selected.length >= 2;
-              return `<div class="muscle-option ${isChecked ? "checked" : ""} ${isDisabled ? "disabled" : ""}" 
+              const partner = PAIRED_MUSCLES[m.id];
+              // A slot is "effectively full" when it has 2 muscles and this one isn't already there
+              const isFull = !isChecked && selected.filter(s => s !== "rest" && s !== "mobility").length >= 2;
+              // Paired muscles can always be toggled together (they replace the pair, not add to 2)
+              const isDisabled = isFull && !partner;
+              return `<div class="muscle-option ${isChecked ? "checked" : ""} ${isDisabled ? "disabled" : ""}"
                 data-day="${k}" data-muscle="${m.id}">
-                ${isChecked ? "✓" : "+"} ${m.label}
+                ${isChecked ? "✓" : "+"} ${m.label}${partner ? ` <span class="pair-hint">+${partner.toUpperCase()}</span>` : ""}
               </div>`;
             }).join("")}
           </div>
-        </div>
+        </div>` : ""}
       </div>
     `;
 
-    // Drag support
-    el.draggable = true;
-    el.ondragstart = (e) => { e.dataTransfer.setData("text/plain", idx); el.classList.add("dragging"); };
-    el.ondragend = () => el.classList.remove("dragging");
-    el.ondragover = (e) => e.preventDefault();
-    el.ondrop = (e) => {
-      e.preventDefault();
-      const fromIdx = parseInt(e.dataTransfer.getData("text/plain"), 10);
-      if (fromIdx === idx || isNaN(fromIdx)) return;
-      const temp = draftOrder[fromIdx];
-      draftOrder[fromIdx] = draftOrder[idx];
-      draftOrder[idx] = temp;
-      renderSchedule();
-    };
-
-    // Dropdown toggle
-    el.querySelector(".sd-open-btn").onclick = (e) => {
-      e.stopPropagation();
-      document.querySelectorAll(".sd-muscle-dropdown").forEach(d => {
-        if (d.dataset.key !== k) d.classList.add("hidden");
-      });
-      el.querySelector(".sd-muscle-dropdown").classList.toggle("hidden");
-    };
-
-    // Muscle option select/deselect
-    el.querySelectorAll(".muscle-option").forEach(opt => {
-      opt.onclick = (e) => {
-        e.stopPropagation();
-        if (opt.classList.contains("disabled")) return;
-        const day = opt.dataset.day;
-        const muscle = opt.dataset.muscle;
-        const current = draftDayMuscles[day] || [];
-
-        if (current.includes(muscle)) {
-          // Deselect it
-          draftDayMuscles[day] = current.filter(m => m !== muscle);
-        } else {
-          if (muscle === "rest" || muscle === "mobility") {
-            // REST and MOBILITY are solo — clear everything else
-            draftDayMuscles[day] = [muscle];
-          } else {
-            // Regular muscle — remove REST/MOBILITY if present, then add
-            const filtered = current.filter(m => m !== "rest" && m !== "mobility");
-            if (filtered.length >= 2) return;
-            draftDayMuscles[day] = [...filtered, muscle];
-          }
-        }
+    if (!isSunday) {
+      // Drag support — Sunday slot is immovable
+      el.draggable = true;
+      el.ondragstart = (e) => { e.dataTransfer.setData("text/plain", idx); el.classList.add("dragging"); };
+      el.ondragend = () => el.classList.remove("dragging");
+      el.ondragover = (e) => { if (idx < 6) e.preventDefault(); }; // Can't drop onto Sunday slot
+      el.ondrop = (e) => {
+        e.preventDefault();
+        if (idx >= 6) return; // Protect Sunday slot
+        const fromIdx = parseInt(e.dataTransfer.getData("text/plain"), 10);
+        if (fromIdx === idx || isNaN(fromIdx) || fromIdx >= 6) return;
+        const temp = draftOrder[fromIdx];
+        draftOrder[fromIdx] = draftOrder[idx];
+        draftOrder[idx] = temp;
         renderSchedule();
       };
-    });
+
+      // Dropdown toggle
+      el.querySelector(".sd-open-btn").onclick = (e) => {
+        e.stopPropagation();
+        document.querySelectorAll(".sd-muscle-dropdown").forEach(d => {
+          if (d.dataset.key !== k) d.classList.add("hidden");
+        });
+        el.querySelector(".sd-muscle-dropdown").classList.toggle("hidden");
+      };
+
+      // Muscle option select/deselect
+      el.querySelectorAll(".muscle-option").forEach(opt => {
+        opt.onclick = (e) => {
+          e.stopPropagation();
+          if (opt.classList.contains("disabled")) return;
+          const day = opt.dataset.day;
+          const muscle = opt.dataset.muscle;
+          const partner = PAIRED_MUSCLES[muscle];
+          const cur = draftDayMuscles[day] || [];
+
+          if (cur.includes(muscle)) {
+            // Deselect — if this muscle has a partner, remove both
+            let next = cur.filter(m => m !== muscle);
+            if (partner) next = next.filter(m => m !== partner);
+            draftDayMuscles[day] = next;
+          } else {
+            if (muscle === "mobility") {
+              // MOBILITY is solo
+              draftDayMuscles[day] = [muscle];
+            } else if (partner) {
+              // Paired muscle — select BOTH, replacing whatever was there
+              draftDayMuscles[day] = [muscle, partner];
+            } else {
+              // Unpaired muscle — strip REST/MOBILITY, cap at 2
+              const filtered = cur.filter(m => m !== "rest" && m !== "mobility");
+              if (filtered.length >= 2) return;
+              draftDayMuscles[day] = [...filtered, muscle];
+            }
+          }
+          renderSchedule();
+        };
+      });
+    } // end if (!isSunday)
 
     list.appendChild(el);
   });
-
-  // Close dropdowns on outside click
-  setTimeout(() => {
-    document.addEventListener("click", () => {
-      document.querySelectorAll(".sd-muscle-dropdown").forEach(d => d.classList.add("hidden"));
-    }, { once: true });
-  }, 0);
 
   checkTrainerWarnings();
 }
@@ -1126,10 +1168,22 @@ if(sreset) {
 const ssave = document.getElementById("saveSchedule");
 if(ssave) {
   ssave.onclick = () => {
+    // Always guarantee Sunday is last and locked to REST before saving
+    draftDayMuscles["sun"] = ["rest"];
+    if (draftOrder[6] !== "sun") {
+      const sunIdx = draftOrder.indexOf("sun");
+      if (sunIdx !== -1) draftOrder.splice(sunIdx, 1);
+      draftOrder[6] = "sun";
+    }
     ORDER = [...draftOrder];
     dayMuscles = JSON.parse(JSON.stringify(draftDayMuscles));
-    localStorage.setItem(pKey("schedule"), JSON.stringify(ORDER));
-    localStorage.setItem(pKey("daymuscles"), JSON.stringify(dayMuscles));
+    try { localStorage.setItem(pKey("schedule"), JSON.stringify(ORDER)); } catch(e) {}
+    try { localStorage.setItem(pKey("daymuscles"), JSON.stringify(dayMuscles)); } catch(e) {}
+    // Clean up the global click listener
+    if (renderSchedule._closeDropdowns) {
+      document.removeEventListener("click", renderSchedule._closeDropdowns);
+      renderSchedule._closeDropdowns = null;
+    }
     renderNav();
     selectDay(current);
     document.getElementById("scheduleModal").classList.remove("open");
@@ -1302,16 +1356,19 @@ function renderProfileSheet() {
   sheet.onclick = (e) => { if (e.target.id === "profileSheet") sheet.remove(); };
 }
 
-document.getElementById("cancelScheduleBtn").onclick = () => {
+function closeScheduleModal() {
   draftOrder = [];
+  if (renderSchedule._closeDropdowns) {
+    document.removeEventListener("click", renderSchedule._closeDropdowns);
+    renderSchedule._closeDropdowns = null;
+  }
   document.getElementById("scheduleModal").classList.remove("open");
-};
+}
+
+document.getElementById("cancelScheduleBtn").onclick = closeScheduleModal;
 
 document.getElementById("scheduleModal").onclick = (e) => {
-  if (e.target.id === "scheduleModal") {
-    draftOrder = [];
-    document.getElementById("scheduleModal").classList.remove("open");
-  }
+  if (e.target.id === "scheduleModal") closeScheduleModal();
 };
 
 
@@ -1767,15 +1824,18 @@ function startRestTimer(seconds) {
   updateRestDisplay();
   showRestTimer();
 
+  // Use wall-clock delta so background tab throttling can't cause drift.
+  const restEndTime = Date.now() + seconds * 1000;
   restInterval = setInterval(() => {
-    restSeconds--;
+    const remaining = Math.ceil((restEndTime - Date.now()) / 1000);
+    restSeconds = Math.max(0, remaining);
     updateRestDisplay();
     if (restSeconds <= 0) {
       clearInterval(restInterval);
       restInterval = null;
       restTimerDone();
     }
-  }, 1000);
+  }, 200); // Poll at 200 ms so the display stays crisp even after tab wakeup
 }
 
 function stopRestTimer() {
