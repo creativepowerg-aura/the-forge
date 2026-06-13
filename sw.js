@@ -37,8 +37,11 @@ self.addEventListener("fetch", e => {
   if (e.request.method !== "GET") return;
   if (!url.startsWith("http://") && !url.startsWith("https://")) return;
 
-  // Let Vercel Analytics and its API pass straight through — never cache telemetry
-  if (url.includes("/_vercel/insights") || url.includes("va.vercel-scripts.com")) return;
+  // Let ALL Vercel infrastructure and analytics requests go straight to network — never cache
+  if (url.includes("/_vercel/") || url.includes("va.vercel-scripts.com")) {
+    e.respondWith(fetch(e.request));
+    return;
+  }
 
   e.respondWith(
     caches.match(e.request)
