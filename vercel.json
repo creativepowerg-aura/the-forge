@@ -1,0 +1,12 @@
+{
+  "rewrites": [
+    {
+      "source": "/_vercel/(.*)",
+      "destination": "/_vercel/$1"
+    },
+    {
+      "source": "/((?!_vercel).*)",
+      "destination": "/index.html"
+    }
+  ]
+}
