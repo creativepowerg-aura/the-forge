@@ -444,7 +444,21 @@ function renderDay(){
       </div>
       <div class="ctrl">
         <div class="sets">${dots}</div>
-        ${e.gear.includes("Dumbbells") ? `<div class="wbox"><input type="text" inputmode="decimal" placeholder="–" value="${st.weight || ""}" data-w="${e.id}"><span>LB</span></div>` : ""}
+        ${(() => {
+          if (!e.gear.includes("Dumbbells")) return "";
+          // Only look up last lift when no weight entered today (perf: skip once filled)
+          const lastLift = st.weight ? null : getLastLift(e.id);
+          const hitAll = lastLift && lastLift.done >= lastLift.sets;
+          const suggest = lastLift ? (hitAll ? lastLift.weight + 5 : lastLift.weight) : null;
+          const hintHTML = lastLift ? `
+            <button class="overload-hint ${hitAll ? "overload-nudge" : "overload-last"}"
+              data-fill="${suggest}" data-w="${e.id}" title="Tap to fill">
+              ${hitAll
+                ? `↑ Last: ${lastLift.weight}lb (all sets) — tap for ${suggest}lb`
+                : `Last session: ${lastLift.weight}lb — tap to fill`}
+            </button>` : "";
+          return `<div class="wbox"><input type="text" inputmode="decimal" placeholder="${lastLift ? lastLift.weight : "–"}" value="${st.weight || ""}" data-w="${e.id}"><span>LB</span></div>${hintHTML}`;
+        })()}
       </div>
     </div>`;
   });
@@ -455,10 +469,27 @@ function renderDay(){
   root.querySelectorAll(".sdot").forEach(d => d.onclick = onSet);
   root.querySelectorAll("[data-form]").forEach(t => t.onclick = () => openForm(+t.dataset.form));
   root.querySelectorAll("[data-w]").forEach(inp => inp.onchange = () => {
-    const k = inp.dataset.w; 
-    state[k] = state[k] || {done: 0, weight: ""}; 
-    state[k].weight = inp.value.trim(); 
+    const k = inp.dataset.w;
+    state[k] = state[k] || {done: 0, weight: ""};
+    state[k].weight = inp.value.trim();
     saveDay(current, state);
+  });
+
+  // Progressive overload: tap hint badge to auto-fill weight
+  root.querySelectorAll(".overload-hint[data-fill]").forEach(btn => {
+    btn.onclick = (ev) => {
+      ev.stopPropagation();
+      const id = btn.dataset.w;
+      const w = btn.dataset.fill;
+      const inp = root.querySelector(`input[data-w="${id}"]`);
+      if (inp) {
+        inp.value = w;
+        state[id] = state[id] || { done: 0, weight: "" };
+        state[id].weight = w;
+        saveDay(current, state);
+        renderDay(); // re-render so badge disappears and PR badge can appear
+      }
+    };
   });
 
   // Calculate pct and render finish section
@@ -1712,6 +1743,27 @@ function renderPRBadge(exerciseId) {
   const pr = prs[exerciseId];
   if (!pr) return "";
   return `<div class="pr-badge">🏆 PR: ${pr} lb</div>`;
+}
+
+// Returns the most recent prior-session data for an exercise (skips today).
+// Used to power progressive overload suggestions.
+function getLastLift(exerciseId) {
+  try {
+    const index = loadLogIndex(); // newest first
+    const today = getTodayString();
+    for (const id of index) {
+      if (id.startsWith(today)) continue; // skip anything logged today
+      const raw = localStorage.getItem(pKey(`log:${id}`));
+      if (!raw) continue;
+      const session = JSON.parse(raw);
+      if (session.date === today) continue;
+      const ex = session.exercises?.find(e => e.id === exerciseId);
+      if (ex && ex.weight > 0) {
+        return { weight: ex.weight, done: ex.done, sets: ex.sets, date: session.date };
+      }
+    }
+    return null;
+  } catch(e) { return null; }
 }
 
 function renderHistory() {

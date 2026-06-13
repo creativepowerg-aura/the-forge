@@ -3030,3 +3030,46 @@ body {
   border-color: rgba(255,255,255,0.5);
   box-shadow: 0 0 12px rgba(255,255,255,0.15);
 }
+
+/* ── Progressive Overload hints ─────────────────────────────────── */
+.overload-hint {
+  display: block;
+  width: 100%;
+  margin-top: 7px;
+  padding: 7px 11px;
+  border-radius: 9px;
+  border: 1px solid transparent;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  letter-spacing: 0.05em;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+  line-height: 1.4;
+}
+
+/* Neutral state — just showing last session's weight */
+.overload-last {
+  background: rgba(255,255,255,0.04);
+  color: var(--faint);
+  border-color: rgba(255,255,255,0.06);
+}
+.overload-last:hover {
+  background: rgba(255,255,255,0.08);
+  color: var(--dim);
+}
+
+/* Nudge state — all sets completed last time, suggesting an increase */
+.overload-nudge {
+  background: rgba(0,229,255,0.07);
+  color: var(--ember);
+  border-color: rgba(0,229,255,0.22);
+}
+.overload-nudge:hover {
+  background: rgba(0,229,255,0.14);
+  border-color: rgba(0,229,255,0.45);
+  box-shadow: 0 0 12px rgba(0,229,255,0.12);
+}
+.overload-nudge:active {
+  transform: scale(0.98);
+}
